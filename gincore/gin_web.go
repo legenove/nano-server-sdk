@@ -12,6 +12,8 @@ const (
 
 var router *gin.Engine
 
+type HandlerDecorator func(handlerFunc gin.HandlerFunc) gin.HandlerFunc
+
 func PingApi(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "pong",
