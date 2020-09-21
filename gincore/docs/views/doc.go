@@ -9,7 +9,6 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/gin-gonic/gin"
-	"github.com/legenove/nano-server-sdk/gincore"
 	"github.com/legenove/nano-server-sdk/servers"
 	"github.com/legenove/utils"
 )
@@ -46,7 +45,7 @@ func GetAllSwaggerFileByPath(_fpath string) []string {
 func TemplateDocApi(c *gin.Context) {
 	indexPath := path.Join(servers.Server.DocDir, "swagger")
 	if !utils.PathExists(indexPath) {
-		panic(gincore.ErrSchemaOptionNotFound)
+		panic(servers.ErrSchemaOptionNotFound)
 	}
 	docFileNames := GetAllSwaggerFileByPath(indexPath)
 	infos := make([]docInfo, 0, len(docFileNames))
@@ -73,7 +72,7 @@ func TemplateDocApi(c *gin.Context) {
 func TemplateDocFileApi(c *gin.Context) {
 	indexPath := path.Join(servers.Server.DocDir, "swagger")
 	if !utils.PathExists(indexPath) {
-		panic(gincore.ErrSchemaOptionNotFound)
+		panic(servers.ErrSchemaOptionNotFound)
 	}
 	docFileNames := GetAllSwaggerFileByPath(indexPath)
 	infos := make([]docInfo, 0, len(docFileNames))
@@ -101,7 +100,7 @@ func TemplateDocSwaggerApi(c *gin.Context) {
 	packageName := c.Param("name")
 
 	if packageName == "" {
-		panic(gincore.ErrSchemaOptionNotFound)
+		panic(servers.ErrSchemaOptionNotFound)
 	}
 	_type := "json"
 	if strings.HasSuffix(packageName, ".json") {
@@ -131,14 +130,14 @@ func TemplateDocProtoApi(c *gin.Context) {
 	packageName := c.Param("name")
 
 	if packageName == "" {
-		panic(gincore.ErrSchemaOptionNotFound)
+		panic(servers.ErrSchemaOptionNotFound)
 	}
 	if strings.HasSuffix(packageName, ".proto") {
 		packageName = packageName[:len(packageName)-6]
 	}
 	tpath := path.Join(servers.Server.DocDir, "proto", packageName, packageName+".proto")
 	if !utils.FileExists(tpath) {
-		panic(gincore.ErrSchemaOptionNotFound)
+		panic(servers.ErrSchemaOptionNotFound)
 	}
 	data, _ := ioutil.ReadFile(tpath)
 	c.Status(200)
