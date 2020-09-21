@@ -1,13 +1,8 @@
 package gincore
 
-import "github.com/gin-gonic/gin"
-
-const (
-	SERVER_TYPE_REST   = "rest"
-	SERVER_TYPE_RPC    = "rpc"
-	SERVER_TYPE_TCP    = "tcp"
-	SERVER_TYPE_SERVER = "server" // rest and rpc and tcp
-	SERVER_TYPE_ASYNC  = "async"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/legenove/nano-server-sdk/servers"
 )
 
 var router *gin.Engine
@@ -27,10 +22,10 @@ func GetRouter() *gin.Engine {
 		r.Use(LoggerRecovery())
 		// regist error
 		r.NoRoute(func(c *gin.Context) {
-			c.JSON(404, ErrPageNotFoundRequest)
+			c.JSON(404, servers.ErrPageNotFoundRequest)
 		})
 		r.NoMethod(func(c *gin.Context) {
-			c.JSON(405, ErrMethodNotAllowRequest)
+			c.JSON(405, servers.ErrMethodNotAllowRequest)
 		})
 		router = r
 	}

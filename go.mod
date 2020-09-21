@@ -1,4 +1,4 @@
-module github.com/legenove/server-sdk-go
+module github.com/legenove/nano-server-sdk
 
 go 1.14
 

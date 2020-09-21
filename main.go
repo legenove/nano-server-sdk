@@ -1,8 +1,9 @@
 package main
 
 import (
-	_ "github.com/legenove/server-sdk-go/gincore"
-	_ "github.com/legenove/server-sdk-go/grpccore"
+	_ "github.com/legenove/nano-server-sdk/gincore"
+	_ "github.com/legenove/nano-server-sdk/grpccore"
+	_ "github.com/legenove/nano-server-sdk/servers"
 )
 
 func main() {

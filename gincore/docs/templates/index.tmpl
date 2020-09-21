@@ -1,0 +1,84 @@
+<!-- HTML for static distribution bundle build -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Doc Online</title>
+    <link rel="icon" type="image/png" href="/static/favicon-80x70.png" sizes="32x32"/>
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="/static/css/swagger-ui.css">
+    <style>
+        html {
+            box-sizing: border-box;
+            overflow: -moz-scrollbars-vertical;
+            overflow-y: scroll;
+        }
+
+        *,
+        *:before,
+        *:after {
+            box-sizing: inherit;
+        }
+
+        body {
+            margin: 0;
+            background: #fafafa;
+        }
+    </style>
+</head>
+
+<body>
+<div class="row" style="min-width: 750px;">
+    <nav class="navbar navbar-default" style="margin-bottom: 5px">
+        <div class="col-md-10 col-md-offset-1" style="padding-left: 5px;padding-right: 5px">
+
+            <div class="container-fluid" style="padding-left: 0">
+                <div class="navbar-header">
+                    <a class="navbar-brand" href="#">
+                        <img alt="Brand" src="/static/favicon.png" style="height: 35px">
+                    </a>
+                    <p class="navbar-text" style="margin-top: 20px; margin-bottom: 10px">
+                    <b style="color: #363535">{{.serverTitle}}</b> [{{.serverGroup}} / {{.serverName}}]
+                    </p>
+                </div>
+                <ul class="nav nav-tabs" style="padding-top: 10px">
+                    <li role="presentation" class="active"><a href="/doc">swagger文档</a></li>
+                    <li role="presentation"><a href="/doc/filedoc">文档文件</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+</div>
+<div class="row" style="min-width: 750px;">
+    <div class="col-md-10 col-md-offset-1" id="swagger-ui" style="padding-left: 5px;padding-right: 5px"></div>
+</div>
+<script src="/static/js/swagger-ui-bundle.js"></script>
+<script src="/static/js/swagger-ui-standalone-preset.js"></script>
+<script>
+    window.onload = function () {
+        // Begin Swagger UI call region
+        const ui = SwaggerUIBundle({
+             urls: [ {{ range $i, $info := .docInfos }}
+                     {{if $i}}, {{end}}{
+                         url: {{$info.Path}},
+                         name: {{$info.Title}}
+                     }
+                  {{ end }}],
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIStandalonePreset
+            ],
+            plugins: [
+                // SwaggerUIBundle.plugins.DownloadUrl
+            ],
+            layout: "StandaloneLayout",
+        })
+        // End Swagger UI call region
+
+        window.ui = ui
+    }
+</script>
+</body>
+</html>

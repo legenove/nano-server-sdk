@@ -1,8 +1,9 @@
 package grpccore
 
 import (
-	"google.golang.org/grpc"
 	"sync"
+
+	"google.golang.org/grpc"
 )
 
 type RegisterServer func(s *grpc.Server)
@@ -10,6 +11,7 @@ type RegisterServer func(s *grpc.Server)
 var registerMapper = map[string]RegisterServer{}
 var rpcServer *grpc.Server
 var mu sync.Mutex
+
 func GetServerWithOptions(opt ...grpc.ServerOption) *grpc.Server {
 	mu.Lock()
 	defer mu.Unlock()
