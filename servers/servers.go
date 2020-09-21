@@ -2,6 +2,7 @@ package servers
 
 import (
 	"encoding/base64"
+	"github.com/legenove/cocore"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,6 +53,8 @@ func InitServer(name, group, title string, openDoc bool, docDir, serverType, sec
 	if strings.HasPrefix(Server.DocDir, "$GOPATH") {
 		Server.DocDir = filepath.Join(os.Getenv("GOPATH"), Server.DocDir[7:])
 	}
+	InitServerLog()
+	cocore.RegisterInitFunc("serverLog", InitServerLog)
 }
 
 func (s *ServerConf) GetServerGroup() string {

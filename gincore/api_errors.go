@@ -2,11 +2,12 @@ package gincore
 
 import (
 	"fmt"
+	"io"
+	"os"
+
 	"github.com/gin-gonic/gin"
 	"github.com/legenove/cocore"
 	"github.com/legenove/nano-server-sdk/servers"
-	"io"
-	"os"
 )
 
 var DefaultWriter io.Writer = os.Stdout
@@ -64,7 +65,7 @@ func LoggerWithWriter(notlogged ...string) gin.HandlerFunc {
 				}
 			}
 		}()
-
+		c.Request.Header.Set(servers.SERVER_INCOME_CONTEXT_IP, RequestIP(c.Request))
 		c.Next()
 	}
 }
