@@ -93,7 +93,7 @@ func AccessLog(logger *zap.Logger, ctx context.Context, duration time.Duration) 
 		zap.String("requestFunc", GetServerRequestFunc(ctx, raw)),
 		zap.String("fromApp", GetServerName(ctx, md)),
 		zap.String("fromProject", GetServerGroup(ctx, md)),
-		zap.String("requestId", GetRequestId(ctx)),
+		zap.String("requestId", GetRequestId(ctx, md)),
 		zap.String("clientIp", GetContextIP(ctx, md)),
 		zap.Namespace("properties"),
 		// TODO 增加query
@@ -122,7 +122,7 @@ func ErrorLog(logger *zap.Logger, ctx context.Context, error_code, reason interf
 		zap.String("clientIp", GetContextIP(ctx, md)),
 		zap.Namespace("properties"),
 		zap.Reflect("error_code", error_code),
-		zap.String("query", GetServerRequestInfo(ctx, raw)),
+		zap.String("query", GetServerRequestInfo(ctx)),
 		zap.String("user-agent", GetUserAgent(ctx, md)),
 		zap.Duration("time", duration),
 		zap.Reflect("reason", reason))
@@ -147,7 +147,7 @@ func WarnLog(logger *zap.Logger, ctx context.Context, error_code, reason interfa
 		zap.String("clientIp", GetContextIP(ctx, md)),
 		zap.Namespace("properties"),
 		zap.Reflect("error_code", error_code),
-		zap.String("query", GetServerRequestInfo(ctx, raw)),
+		zap.String("query", GetServerRequestInfo(ctx)),
 		zap.String("user-agent", GetUserAgent(ctx, md)),
 		zap.Duration("time", duration),
 		zap.Reflect("reason", reason))

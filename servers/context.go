@@ -11,9 +11,10 @@ import (
 
 type RequestType int
 
-type serverContextKey struct{}
+type serverContextStringKey struct{}
+type serverContextRequestKey struct{}
 
-type rawKV map[string]interface{}
+type rawKV map[string]string
 
 const (
 	_ RequestType = iota
@@ -37,40 +38,40 @@ const (
 	SERVER_INCOME_USER_AGENT   = "User-Agent"
 )
 
-func GetRestRequestCtx(kv ...interface{}) context.Context {
+func GetRestRequestCtx(kv ...string) context.Context {
 	return GetRequestCtx(REQUEST_TYPE_REST, kv...)
 }
 
-func GetJRPCRequestCtx(kv ...interface{}) context.Context {
+func GetJRPCRequestCtx(kv ...string) context.Context {
 	return GetRequestCtx(REQUEST_TYPE_JRPC, kv...)
 }
 
-func GetTCPRequestCtx(kv ...interface{}) context.Context {
+func GetTCPRequestCtx(kv ...string) context.Context {
 	return GetRequestCtx(REQUEST_TYPE_TCP, kv...)
 }
 
-func GetGRPCRequestCtx(kv ...interface{}) context.Context {
+func GetGRPCRequestCtx(kv ...string) context.Context {
 	return GetRequestCtx(REQUEST_TYPE_GRPC, kv...)
 }
 
-func GetRequestCtx(st RequestType, kv ...interface{}) context.Context {
-	newKvs := append(kv, SERVER_REQUEST_TYPE, st)
+func GetRequestCtx(st RequestType, kv ...string) context.Context {
+	newKvs := append(kv, SERVER_REQUEST_TYPE, GetServerTypeValue(st))
 	return AppendToRequestCtx(context.Background(), newKvs...)
 }
 
-func AppendToRequestCtx(ctx context.Context, kv ...interface{}) context.Context {
+func AppendToRequestCtx(ctx context.Context, kv ...string) context.Context {
 	if len(kv)%2 == 1 {
 		panic(fmt.Sprintf("metadata: AppendToRequestCtx got an odd number of input pairs for metadata: %d", len(kv)))
 	}
-	kvs, _ := ctx.Value(serverContextKey{}).(rawKV)
+	kvs, _ := ctx.Value(serverContextStringKey{}).(rawKV)
 	newKvs := make(rawKV, len(kvs)+len(kv)/2)
 	for i := 0; i < len(kv); i += 2 {
-		newKvs[kv[i].(string)] = kv[i+1]
+		newKvs[kv[i]] = kv[i+1]
 	}
 	for k, v := range kvs {
 		newKvs[k] = v
 	}
-	return context.WithValue(ctx, serverContextKey{}, newKvs)
+	return context.WithValue(ctx, serverContextStringKey{}, newKvs)
 }
 
 func GetServerTypeValue(st RequestType) string {
@@ -87,57 +88,57 @@ func GetServerTypeValue(st RequestType) string {
 	return "grpc"
 }
 
-func GetRequestRaw(ctx context.Context) map[string]interface{} {
+func GetRequestRaw(ctx context.Context) map[string]string {
 	if ctx == nil {
-		return map[string]interface{}{}
+		return map[string]string{}
 	}
-	t, ok := ctx.Value(serverContextKey{}).(rawKV)
+	t, ok := ctx.Value(serverContextStringKey{}).(rawKV)
 	if !ok || t == nil {
-		return map[string]interface{}{}
+		return map[string]string{}
 	}
 	return t
 }
 
-func GetRequestValeFromRaw(raw map[string]interface{}, key string) interface{} {
+func GetRequestValeFromRaw(raw map[string]string, key string) string {
 	if val, ok := raw[key]; ok {
 		return val
 	}
-	return nil
+	return ""
 }
 
-func GetRequestValeByKey(key string, ctx context.Context, defaultValue interface{}, raw ...map[string]interface{}) interface{} {
+func GetRequestValeByKey(key string, ctx context.Context, raw ...map[string]string) string {
 	if len(raw) > 0 && raw[0] != nil {
 		res := GetRequestValeFromRaw(raw[0], key)
-		if res == nil {
-			return defaultValue
-		}
 		return res
 	}
 	r := GetRequestRaw(ctx)
 	if val, ok := r[key]; ok {
 		return val
 	}
-	return defaultValue
+	return ""
 }
 
-func GetServerRequestType(ctx context.Context, raw ...map[string]interface{}) string {
-	return GetServerTypeValue(GetRequestValeByKey(SERVER_REQUEST_TYPE,
-		ctx, REQUEST_TYPE_GRPC, raw...).(RequestType))
+func GetServerRequestType(ctx context.Context, raw ...map[string]string) string {
+	return GetRequestValeByKey(SERVER_REQUEST_TYPE,
+		ctx, raw...)
 }
 
-func GetServerRequestFunc(ctx context.Context, raw ...map[string]interface{}) string {
-	return GetRequestValeByKey(SERVER_REQUEST_FUNC, ctx, "", raw...).(string)
+func GetServerRequestFunc(ctx context.Context, raw ...map[string]string) string {
+	return GetRequestValeByKey(SERVER_REQUEST_FUNC, ctx, raw...)
 }
 
-func GetServerRequestInfo(ctx context.Context, raw ...map[string]interface{}) string {
-	req := GetRequestValeByKey(SERVER_REQUEST_INFO, ctx, nil, raw...)
-	if req == nil {
-		return ""
-	}
-	if r, ok := req.(proto.Message); ok {
-		return r.String()
+func GetServerRequestInfo(ctx context.Context) string {
+	t := ctx.Value(serverContextRequestKey{})
+	if t != nil {
+		if r, ok := t.(proto.Message); ok {
+			return r.String()
+		}
 	}
 	return ""
+}
+
+func SetServerRequestInfo(ctx context.Context, req interface{}) context.Context {
+	return context.WithValue(ctx, serverContextRequestKey{}, req)
 }
 
 // Server Info From MD
@@ -198,11 +199,12 @@ func InitContext(ctx context.Context, funcName string, req interface{}) context.
 	if !ok {
 		md = metadata.MD{}
 	}
-	st := GetRequestValeByKey(SERVER_REQUEST_TYPE, ctx, REQUEST_TYPE_GRPC).(RequestType)
-	ctx = AppendToRequestCtx(ctx, SERVER_REQUEST_FUNC, funcName, SERVER_REQUEST_TYPE, st, SERVER_REQUEST_INFO, req)
+	st := GetRequestValeByKey(SERVER_REQUEST_TYPE, ctx)
+	ctx = AppendToRequestCtx(ctx, SERVER_REQUEST_FUNC, funcName, SERVER_REQUEST_TYPE, st)
+	ctx = SetServerRequestInfo(ctx, req)
 	switch st {
 	//case REQUEST_TYPE_REST: // 在gincore生成requestIP
-	case REQUEST_TYPE_GRPC:
+	case "grpc":
 		md.Set(SERVER_INCOME_CONTEXT_IP, RequestIp(ctx))
 		//case REQUEST_TYPE_JRPC: // todo
 		//case REQUEST_TYPE_TCP: // todo
