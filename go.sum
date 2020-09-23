@@ -103,8 +103,8 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/legenove/cocore v1.0.8 h1:iB3nrQb02ww3RsO2AbtS0DyXGGBno2hXC7Yv2QMRRpA=
-github.com/legenove/cocore v1.0.8/go.mod h1:KWFh/UQ7tN+hqc13jqSTgXPdoMfKqCBnQCmd+IfFPxc=
+github.com/legenove/cocore v1.0.10 h1:9XMUhQqZriwRPHkBxl7ykyC+xnFb+oWU2OGiPCoivk0=
+github.com/legenove/cocore v1.0.10/go.mod h1:KWFh/UQ7tN+hqc13jqSTgXPdoMfKqCBnQCmd+IfFPxc=
 github.com/legenove/random v0.0.0-20200903103743-63e912aed639 h1:IbEJsbm/6Al492k4Lwgn5LyNh+pCi2wuvLPSyc9ae90=
 github.com/legenove/random v0.0.0-20200903103743-63e912aed639/go.mod h1:jesibXVjpfCUqgW3szQGX2jEAh1tZYxK47PV/vkGrIE=
 github.com/legenove/utils v0.0.0-20200724081548-f533644e1822/go.mod h1:LU8q6GHxhwMIOe1AEPSASOIEoFla2d7ejICp8bVYuqs=
