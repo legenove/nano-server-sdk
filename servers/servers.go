@@ -2,11 +2,11 @@ package servers
 
 import (
 	"encoding/base64"
-	"github.com/legenove/cocore"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/legenove/cocore"
 	"github.com/legenove/utils"
 )
 
@@ -25,7 +25,16 @@ const (
 var Server = &ServerConf{}
 
 type ServerConf struct {
+	// for cocore Config
+	Debug       bool
+	AppENV      string
+	ConfigDir   string
+	AppConfName string
+	// for db or redis
+	DBDebugLog bool
+	// for servers Config
 	Doc           bool
+	MaxProcs      int
 	DocDir        string
 	Title         string         `json:"server_title" mapstructure:"server_title"`
 	Group         string         `json:"server_group" mapstructure:"server_group"`
@@ -37,13 +46,7 @@ type ServerConf struct {
 	stringSecrets []string
 }
 
-func InitServer(name, group, title string, openDoc bool, docDir, serverType, secretKey, secretType string) {
-	Server.Doc = openDoc
-	Server.DocDir = docDir
-	Server.Name = name
-	Server.Group = group
-	Server.Title = title
-	Server.Type = serverType
+func InitServer(secretKey, secretType string) {
 	secret := ServerSecret{
 		Secret: secretKey,
 		Type:   secretType,
@@ -53,6 +56,7 @@ func InitServer(name, group, title string, openDoc bool, docDir, serverType, sec
 	if strings.HasPrefix(Server.DocDir, "$GOPATH") {
 		Server.DocDir = filepath.Join(os.Getenv("GOPATH"), Server.DocDir[7:])
 	}
+	cocore.InitApp(Server.Debug, Server.AppENV, Server.ConfigDir, Server.AppConfName)
 	InitServerLog()
 	cocore.RegisterInitFunc("serverLog", InitServerLog)
 }
