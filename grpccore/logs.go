@@ -3,7 +3,6 @@ package grpccore
 import (
 	"context"
 	"fmt"
-	"github.com/legenove/cocore"
 	"github.com/legenove/nano-server-sdk/servers"
 	"math/rand"
 	"time"
@@ -51,8 +50,7 @@ func LoggerRecoveryHandler(funcName string, handler grpc.UnaryHandler) grpc.Unar
 				}
 
 				// 未定义的错误，在error中， 定义的错误在warn中
-				zlog, _ := cocore.LogPool.Instance(logDir)
-				servers.WarnLog(zlog, ctx, error_code, reason, duration)
+				servers.WarnLog(logDir, ctx, error_code, reason, duration)
 			}
 		}()
 		ctx = servers.InitContext(ctx, funcName, req)
@@ -69,8 +67,7 @@ func LoggerRecoveryHandler(funcName string, handler grpc.UnaryHandler) grpc.Unar
 		}
 		if accesslog {
 			duration := time.Since(start)
-			log, _ := cocore.LogPool.Instance(servers.LogDirAccess)
-			servers.AccessLog(log, ctx, duration)
+			servers.AccessLog(servers.LogDirAccess, ctx, duration)
 		}
 		return res, err
 	}

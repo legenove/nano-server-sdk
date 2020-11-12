@@ -3,14 +3,15 @@ package servers
 import (
 	"context"
 	"fmt"
-	"go.uber.org/zap/zapcore"
-	"google.golang.org/grpc/metadata"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/legenove/cocore"
 	"github.com/legenove/utils"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc/metadata"
 )
 
 var (
@@ -26,7 +27,36 @@ var (
 
 	// 开放access日志比例，默认全部开放
 	OpenAccessLog int
+	LogWriterNum  int
+	LogPoolNum    int
+	LogChannel    = &logChan{}
 )
+
+type logChan struct {
+	sync.RWMutex
+	C chan LogWriter
+}
+
+func (lc *logChan) NewChan(pn int) {
+	lc.Lock()
+	defer lc.Unlock()
+	if lc.C != nil {
+		close(lc.C)
+	}
+	lc.C = make(chan LogWriter, pn)
+}
+
+func (lc *logChan) GetChan() chan LogWriter {
+	lc.RLock()
+	defer lc.RUnlock()
+	return lc.C
+}
+
+func (lc *logChan) SendWriter(lw LogWriter) {
+	lc.RLock()
+	defer lc.RUnlock()
+	lc.C <- lw
+}
 
 var (
 	LogEventAccess  string
@@ -48,20 +78,83 @@ const (
 	LOG_TYPE_OTHER      = "project"   // 业务日志
 )
 
+func GetIntConfig(key string, defaultValue int) int {
+	r := cocore.App.GetStringConfig(key, "")
+	if r == "" {
+		return defaultValue
+	}
+	i, err := strconv.Atoi(r)
+	if err != nil {
+		return defaultValue
+	}
+	return i
+}
+
+func getMaxMinNum(num, max, min int) int {
+	if num > max {
+		return max
+	}
+	if num < min {
+		return min
+	}
+	return num
+}
+
+func initAccessLog() {
+	OpenAccessLog = getMaxMinNum(GetIntConfig("OPEN_ACCESS_LOG", 100), 100, 0)
+}
+
+func initLogChanelPool() {
+	wNum := getMaxMinNum(GetIntConfig("LOG_WRITER_NUM", 4), 50, 1)
+	pNum := getMaxMinNum(GetIntConfig("LOG_POOL_NUM", 10000), 20000, 200)
+	if wNum == LogWriterNum && pNum == LogPoolNum {
+		return
+	}
+	LogWriterNum = wNum
+	LogPoolNum = pNum
+	go func(wn, pn int) {
+		wg := sync.WaitGroup{}
+		LogChannel.NewChan(pn)
+		logC := LogChannel.GetChan()
+		logP := make(chan bool, wn)
+		for i := 0; i < wn; i++ {
+			logP <- true
+		}
+		for {
+			p, b := <-logP
+			if !b || !p {
+				break
+			}
+			wg.Add(1)
+			go func(c chan LogWriter) {
+				defer func() {
+					wg.Done()
+					if err := recover(); err != nil {
+						safeSend(logP, true)
+					}
+				}()
+				for {
+					select {
+					case writer, b := <-c:
+						if !b {
+							safeClose(logP)
+							goto EXIT
+						}
+						writer.Write()
+						writer.Put()
+					}
+				}
+			EXIT:
+			}(logC)
+		}
+		wg.Wait()
+	}(LogWriterNum, LogPoolNum)
+}
+
 func InitServerLog() {
 	// 开放access日志比例
-	openAccessLog := cocore.App.GetStringConfig("OPEN_ACCESS_LOG", "100")
-	i, err := strconv.Atoi(openAccessLog)
-	if err != nil {
-		i = 100
-	}
-	if i > 100 {
-		OpenAccessLog = 100
-	} else if i <= 0 {
-		OpenAccessLog = 0
-	} else {
-		OpenAccessLog = i
-	}
+	initAccessLog()
+	initLogChanelPool()
 	LogDirError = cocore.App.GetStringConfig("ERROR_LOG_NAME", LOG_TYPE_APP_ERROR)
 	LogDirAccess = cocore.App.GetStringConfig("ACCESS_LOG_NAME", LOG_TYPE_APP_ACCESS)
 	LogDirWarn = cocore.App.GetStringConfig("WARN_LOG_NAME", LOG_TYPE_APP_WARN)
@@ -78,79 +171,89 @@ func InitServerLog() {
 	LogEventRequest = utils.ConcatenateStrings(LogDirOther, "_", LOG_TYPE_REQUEST)
 }
 
-func AccessLog(logger *zap.Logger, ctx context.Context, duration time.Duration) {
+func AccessLog(logName string, ctx context.Context, duration time.Duration) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		md = metadata.MD{}
 	}
 	raw := GetRequestRaw(ctx)
-	logger.Info("access",
-		zap.String("log_type", LOG_TYPE_APP_ACCESS),
-		zap.String("event", LogEventAccess),
-		zap.String("logServer", Server.GetServerName()),
-		zap.String("logServerGroup", Server.GetServerGroup()),
-		zap.String("requestType", GetServerRequestType(ctx, raw)),
-		zap.String("requestFunc", GetServerRequestFunc(ctx, raw)),
-		zap.String("fromApp", GetServerName(ctx, md)),
-		zap.String("fromProject", GetServerGroup(ctx, md)),
-		zap.String("requestId", GetRequestId(ctx, md)),
-		zap.String("clientIp", GetContextIP(ctx, md)),
-		zap.Namespace("properties"),
-		// TODO 增加query
-		//zap.String("query", query),
-		zap.String("user-agent", GetUserAgent(ctx, md)),
-		zap.Duration("time", duration),
-	)
+	lw := GetRequestWriter()
+	lw.msg = "access"
+	lw.logName = logName
+	lw.logLevel = zap.InfoLevel
+	lw.logType = LOG_TYPE_APP_ACCESS
+	lw.event = LogEventAccess
+	lw.logServer = Server.GetServerName()
+	lw.logServerGroup = Server.GetServerGroup()
+	lw.requestType = GetServerRequestType(ctx, raw)
+	lw.requestFunc = GetServerRequestFunc(ctx, raw)
+	lw.fromApp = GetServerName(ctx, md)
+	lw.fromProject = GetServerGroup(ctx, md)
+	lw.requestId = GetRequestId(ctx, md)
+	lw.clientIp = GetContextIP(ctx, md)
+
+	lw.LogCase = RequestAccessTypeCase
+	lw.userAgent = GetUserAgent(ctx, md)
+	lw.duration = duration
+	LogChannel.SendWriter(lw)
 }
 
-func ErrorLog(logger *zap.Logger, ctx context.Context, error_code, reason interface{}, duration time.Duration) {
+func ErrorLog(logName string, ctx context.Context, error_code, reason interface{}, duration time.Duration) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		md = metadata.MD{}
 	}
 	raw := GetRequestRaw(ctx)
-	logger.Error("error",
-		zap.String("log_type", LOG_TYPE_APP_ERROR),
-		zap.String("event", LogEventError),
-		zap.String("logServer", Server.GetServerName()),
-		zap.String("logServerGroup", Server.GetServerGroup()),
-		zap.String("requestType", GetServerRequestType(ctx, raw)),
-		zap.String("requestFunc", GetServerRequestFunc(ctx, raw)),
-		zap.String("fromApp", GetServerName(ctx, md)),
-		zap.String("fromProject", GetServerGroup(ctx, md)),
-		zap.String("requestId", GetRequestId(ctx)),
-		zap.String("clientIp", GetContextIP(ctx, md)),
-		zap.Namespace("properties"),
-		zap.Reflect("error_code", error_code),
-		zap.String("query", GetServerRequestInfo(ctx)),
-		zap.String("user-agent", GetUserAgent(ctx, md)),
-		zap.Duration("time", duration),
-		zap.Reflect("reason", reason))
+	lw := GetRequestWriter()
+	lw.msg = "error"
+	lw.logName = logName
+	lw.logLevel = zap.InfoLevel
+	lw.logType = LOG_TYPE_APP_ERROR
+	lw.event = LogEventError
+	lw.logServer = Server.GetServerName()
+	lw.logServerGroup = Server.GetServerGroup()
+	lw.requestType = GetServerRequestType(ctx, raw)
+	lw.requestFunc = GetServerRequestFunc(ctx, raw)
+	lw.fromApp = GetServerName(ctx, md)
+	lw.fromProject = GetServerGroup(ctx, md)
+	lw.requestId = GetRequestId(ctx, md)
+	lw.clientIp = GetContextIP(ctx, md)
+
+	lw.LogCase = RequestErrorTypeCase
+	lw.userAgent = GetUserAgent(ctx, md)
+	lw.duration = duration
+	lw.errorCode = error_code
+	lw.reason = reason
+	LogChannel.SendWriter(lw)
 }
 
-func WarnLog(logger *zap.Logger, ctx context.Context, error_code, reason interface{}, duration time.Duration) {
+func WarnLog(logName string, ctx context.Context, error_code, reason interface{}, duration time.Duration) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		md = metadata.MD{}
 	}
 	raw := GetRequestRaw(ctx)
-	logger.Warn("warning",
-		zap.String("log_type", LOG_TYPE_APP_WARN),
-		zap.String("event", LogEventError),
-		zap.String("logServer", Server.GetServerName()),
-		zap.String("logServerGroup", Server.GetServerGroup()),
-		zap.String("requestType", GetServerRequestType(ctx, raw)),
-		zap.String("requestFunc", GetServerRequestFunc(ctx, raw)),
-		zap.String("fromApp", GetServerName(ctx, md)),
-		zap.String("fromProject", GetServerGroup(ctx, md)),
-		zap.String("requestId", GetRequestId(ctx)),
-		zap.String("clientIp", GetContextIP(ctx, md)),
-		zap.Namespace("properties"),
-		zap.Reflect("error_code", error_code),
-		zap.String("query", GetServerRequestInfo(ctx)),
-		zap.String("user-agent", GetUserAgent(ctx, md)),
-		zap.Duration("time", duration),
-		zap.Reflect("reason", reason))
+	lw := GetRequestWriter()
+	lw.msg = "warning"
+	lw.logName = logName
+	lw.logLevel = zap.InfoLevel
+	lw.logType = LOG_TYPE_APP_WARN
+	lw.event = LogEventError
+	lw.logServer = Server.GetServerName()
+	lw.logServerGroup = Server.GetServerGroup()
+	lw.requestType = GetServerRequestType(ctx, raw)
+	lw.requestFunc = GetServerRequestFunc(ctx, raw)
+	lw.fromApp = GetServerName(ctx, md)
+	lw.fromProject = GetServerGroup(ctx, md)
+	lw.requestId = GetRequestId(ctx, md)
+	lw.clientIp = GetContextIP(ctx, md)
+
+	lw.LogCase = RequestWarnTypeCase
+	lw.userAgent = GetUserAgent(ctx, md)
+	lw.duration = duration
+	lw.errorCode = error_code
+	lw.reason = reason
+	LogChannel.SendWriter(lw)
 }
 
 func AddRequestLog(logger *zap.Logger, ctx context.Context) *zap.Logger {
