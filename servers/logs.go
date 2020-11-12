@@ -172,55 +172,19 @@ func InitServerLog() {
 }
 
 func AccessLog(logName string, ctx context.Context, duration time.Duration) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		md = metadata.MD{}
-	}
-	raw := GetRequestRaw(ctx)
-	lw := GetRequestWriter()
+	lw := GetAccessLogWriter()
 	lw.msg = "access"
 	lw.logName = logName
-	lw.logLevel = zap.InfoLevel
-	lw.logType = LOG_TYPE_APP_ACCESS
-	lw.event = LogEventAccess
-	lw.logServer = Server.GetServerName()
-	lw.logServerGroup = Server.GetServerGroup()
-	lw.requestType = GetServerRequestType(ctx, raw)
-	lw.requestFunc = GetServerRequestFunc(ctx, raw)
-	lw.fromApp = GetServerName(ctx, md)
-	lw.fromProject = GetServerGroup(ctx, md)
-	lw.requestId = GetRequestId(ctx, md)
-	lw.clientIp = GetContextIP(ctx, md)
-
-	lw.LogCase = RequestAccessTypeCase
-	lw.userAgent = GetUserAgent(ctx, md)
+	lw.ctx = ctx
 	lw.duration = duration
 	LogChannel.SendWriter(lw)
 }
 
 func ErrorLog(logName string, ctx context.Context, error_code, reason interface{}, duration time.Duration) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		md = metadata.MD{}
-	}
-	raw := GetRequestRaw(ctx)
-	lw := GetRequestWriter()
+	lw := GetErrorWriter()
 	lw.msg = "error"
+	lw.ctx = ctx
 	lw.logName = logName
-	lw.logLevel = zap.InfoLevel
-	lw.logType = LOG_TYPE_APP_ERROR
-	lw.event = LogEventError
-	lw.logServer = Server.GetServerName()
-	lw.logServerGroup = Server.GetServerGroup()
-	lw.requestType = GetServerRequestType(ctx, raw)
-	lw.requestFunc = GetServerRequestFunc(ctx, raw)
-	lw.fromApp = GetServerName(ctx, md)
-	lw.fromProject = GetServerGroup(ctx, md)
-	lw.requestId = GetRequestId(ctx, md)
-	lw.clientIp = GetContextIP(ctx, md)
-
-	lw.LogCase = RequestErrorTypeCase
-	lw.userAgent = GetUserAgent(ctx, md)
 	lw.duration = duration
 	lw.errorCode = error_code
 	lw.reason = reason
@@ -228,28 +192,10 @@ func ErrorLog(logName string, ctx context.Context, error_code, reason interface{
 }
 
 func WarnLog(logName string, ctx context.Context, error_code, reason interface{}, duration time.Duration) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		md = metadata.MD{}
-	}
-	raw := GetRequestRaw(ctx)
-	lw := GetRequestWriter()
+	lw := GetErrorWriter()
 	lw.msg = "warning"
+	lw.ctx = ctx
 	lw.logName = logName
-	lw.logLevel = zap.InfoLevel
-	lw.logType = LOG_TYPE_APP_WARN
-	lw.event = LogEventError
-	lw.logServer = Server.GetServerName()
-	lw.logServerGroup = Server.GetServerGroup()
-	lw.requestType = GetServerRequestType(ctx, raw)
-	lw.requestFunc = GetServerRequestFunc(ctx, raw)
-	lw.fromApp = GetServerName(ctx, md)
-	lw.fromProject = GetServerGroup(ctx, md)
-	lw.requestId = GetRequestId(ctx, md)
-	lw.clientIp = GetContextIP(ctx, md)
-
-	lw.LogCase = RequestWarnTypeCase
-	lw.userAgent = GetUserAgent(ctx, md)
 	lw.duration = duration
 	lw.errorCode = error_code
 	lw.reason = reason

@@ -1,12 +1,13 @@
 package servers
 
 import (
+	"context"
+	"google.golang.org/grpc/metadata"
 	"sync"
 	"time"
 
 	"github.com/legenove/cocore"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 type LogWriter interface {
@@ -14,105 +15,118 @@ type LogWriter interface {
 	Put()
 }
 
-type LogTypeCase int
-
-const (
-	RequestAccessTypeCase LogTypeCase = iota + 1
-	RequestErrorTypeCase
-	RequestWarnTypeCase
-)
-
 type BaseWriter struct {
-	logName        string
-	logLevel       zapcore.Level
-	msg            string
-	logType        string
-	event          string
-	logServer      string
-	logServerGroup string
-	requestType    string
-	requestFunc    string
-	fromApp        string
-	fromProject    string
-	requestId      string
-	clientIp       string
+	logName string
+	msg     string
+	ctx     context.Context
 }
 
 func (a *BaseWriter) getLogger() (*zap.Logger, error) {
 	return cocore.LogPool.Instance(a.logName)
 }
 
-func (a *BaseWriter) getBaseField(logger *zap.Logger) *zap.Logger {
-	return logger.With(
-		zap.String("log_type", a.logType),
-		zap.String("event", a.event),
-		zap.String("logServer", a.logServer),
-		zap.String("logServerGroup", a.logServerGroup),
-		zap.String("requestType", a.requestType),
-		zap.String("requestFunc", a.requestFunc),
-		zap.String("fromApp", a.fromApp),
-		zap.String("fromProject", a.fromProject),
-		zap.String("requestId", a.requestId),
-		zap.String("clientIp", a.clientIp),
-		zap.Namespace("properties"),
-	)
+/**
+access log
+*/
+var AccessWriterPool = sync.Pool{
+	New: func() interface{} {
+		return &AccessLogWriter{}
+	},
 }
 
-var RequestWriterPool = sync.Pool{
-	New: newRequestWriter,
+func GetAccessLogWriter() *AccessLogWriter {
+	return AccessWriterPool.Get().(*AccessLogWriter)
 }
 
-func GetRequestWriter() *RequestWriter {
-	return RequestWriterPool.Get().(*RequestWriter)
-}
-
-func newRequestWriter() interface{} {
-	return &RequestWriter{}
-}
-
-type RequestWriter struct {
+type AccessLogWriter struct {
 	BaseWriter
-	LogCase   LogTypeCase
-	userAgent string
-	errorCode interface{}
-	query     string
-	duration  time.Duration
-	reason    interface{}
+	duration time.Duration
 }
 
-func (a *RequestWriter) Put() {
-	RequestWriterPool.Put(a)
+func (a *AccessLogWriter) Put() {
+	AccessWriterPool.Put(a)
 }
 
-func (a *RequestWriter) Write() error {
+func (a *AccessLogWriter) Write() error {
 	logger, err := a.getLogger()
 	if err != nil {
 		return err
 	}
-	logger.With(
-		zap.String("user-agent", a.userAgent),
-		zap.Duration("duration", a.duration),
+	md, ok := metadata.FromIncomingContext(a.ctx)
+	if !ok {
+		md = metadata.MD{}
+	}
+	raw := GetRequestRaw(a.ctx)
+	logger.Info("access",
+		zap.String("log_type", LOG_TYPE_APP_ACCESS),
+		zap.String("event", LogEventAccess),
+		zap.String("logServer", Server.GetServerName()),
+		zap.String("logServerGroup", Server.GetServerGroup()),
+		zap.String("requestType", GetServerRequestType(a.ctx, raw)),
+		zap.String("requestFunc", GetServerRequestFunc(a.ctx, raw)),
+		zap.String("fromApp", GetServerName(a.ctx, md)),
+		zap.String("fromProject", GetServerGroup(a.ctx, md)),
+		zap.String("requestId", GetRequestId(a.ctx, md)),
+		zap.String("clientIp", GetContextIP(a.ctx, md)),
+		zap.Namespace("properties"),
+		// TODO 增加query
+		//zap.String("query", query),
+		zap.String("user-agent", GetUserAgent(a.ctx, md)),
+		zap.Duration("time", a.duration),
 	)
-	if a.LogCase != RequestAccessTypeCase {
-		logger.With(
-			zap.Reflect("error_code", a.errorCode),
-			zap.String("query", a.query),
-			zap.Reflect("reason", a.reason),
-		)
-	}
-	switch a.logLevel {
-	case zap.DebugLevel:
-		logger.Debug(a.msg)
-	case zap.InfoLevel:
-		logger.Info(a.msg)
-	case zap.WarnLevel:
-		logger.Warn(a.msg)
-	case zap.ErrorLevel:
-		logger.Error(a.msg)
-		err = logger.Sync()
-	default:
-		logger.Error(a.msg)
-
-	}
 	return err
+}
+
+/**
+access log
+*/
+var ErrorWriterPool = sync.Pool{
+	New: func() interface{} {
+		return &ErrorLogWriter{}
+	},
+}
+
+func GetErrorWriter() *ErrorLogWriter {
+	return ErrorWriterPool.Get().(*ErrorLogWriter)
+}
+
+type ErrorLogWriter struct {
+	BaseWriter
+	duration  time.Duration
+	reason    interface{}
+	errorCode interface{}
+}
+
+func (a *ErrorLogWriter) Put() {
+	AccessWriterPool.Put(a)
+}
+
+func (a *ErrorLogWriter) Write() error {
+	logger, err := a.getLogger()
+	if err != nil {
+		return err
+	}
+	md, ok := metadata.FromIncomingContext(a.ctx)
+	if !ok {
+		md = metadata.MD{}
+	}
+	raw := GetRequestRaw(a.ctx)
+	logger.Warn("warning",
+		zap.String("log_type", LOG_TYPE_APP_WARN),
+		zap.String("event", LogEventError),
+		zap.String("logServer", Server.GetServerName()),
+		zap.String("logServerGroup", Server.GetServerGroup()),
+		zap.String("requestType", GetServerRequestType(a.ctx, raw)),
+		zap.String("requestFunc", GetServerRequestFunc(a.ctx, raw)),
+		zap.String("fromApp", GetServerName(a.ctx, md)),
+		zap.String("fromProject", GetServerGroup(a.ctx, md)),
+		zap.String("requestId", GetRequestId(a.ctx)),
+		zap.String("clientIp", GetContextIP(a.ctx, md)),
+		zap.Namespace("properties"),
+		zap.Reflect("error_code", a.errorCode),
+		zap.String("query", GetServerRequestInfo(a.ctx)),
+		zap.String("user-agent", GetUserAgent(a.ctx, md)),
+		zap.Duration("time", a.duration),
+		zap.Reflect("reason", a.reason))
+	return nil
 }
